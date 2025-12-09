@@ -116,29 +116,16 @@ class VehicleSensors:
         # 3) LiDAR 前/后距离及点云
         # 注：你 measure_front_rear_from_lidar() 里已经不保存文件，仅返回 dict，非常适合直接复用
         if self.use_lidar:
-            lidar_info = self.measure_front_rear_from_lidar(
-                data_dir="",        # 保存交给 logger 来做，这里可以传空或 None
-                cfg=None,
-                timestamp=timestamp
+            lidar_info = self._read_lidar_raw(
             )
         else:
             lidar_info = {
-                "front_m": float("nan"),
-                "rear_m": float("nan"),
-                "n_front": 0,
-                "n_rear": 0,
-                "xf": np.array([]),
-                "yf": np.array([]),
-                "rf": np.array([]),
-                "xr": np.array([]),
-                "yr": np.array([]),
-                "rr": np.array([]),
+                "distance": np.array([]),
+                "angles": np.array([]),
                 "front_fallback": False,
             }
         out["lidar"] = lidar_info  
 
-        out["front_m"] = lidar_info["front_m"]
-        out["rear_m"] = lidar_info["rear_m"]
         # 4) 统一加上时间戳
         if timestamp is not None:
             out["t_s"] = float(timestamp)

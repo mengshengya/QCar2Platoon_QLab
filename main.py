@@ -31,7 +31,6 @@ log_file = log_dir / f"run_{timestamp}.log"
 log_thread = LogConsumer(log_queue, log_file, stop_event)    # configure log file path
 log_thread.start()                                                # launch logger in background
 
-
 def main():
     sim_cfg = get_simconfig()                                     # load simulation configuration
     update_rate = sim_cfg.sim_update_rate                         # update frequency [Hz]

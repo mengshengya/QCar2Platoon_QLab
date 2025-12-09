@@ -21,7 +21,7 @@ class CommConfig:
 @dataclass
 class SimConfig:
     # 车辆数量与类型
-    num_cars: int = 3
+    num_cars: int = 4
     car_type: str = "QC2"
 
     # 仿真时间长度（秒）
