@@ -45,7 +45,7 @@ class VehicleAgent:
         self.u = None                     # 当前控制输入
 
         # 组件
-        self.qcar = qcar                # QCar 设备对象
+        self.qcar = None              # QCar 设备对象
         self.controller = controller      # 控制器对象
         self.observer = observer          # 观测器对象
         self.comm = comm_endpoint         # 通信端点（发/收）
@@ -115,4 +115,24 @@ class VehicleAgent:
             # print(f"ERROR!!!!Vehicle {self.vehicle_id}: Incomplete measurements for state_true construction.")
 
         return self.state_true, meas
-    
+
+
+    def apply_control_cmd(slef, t: float, thr_cmd: float, strg_cmd: float):
+        if slef.qcar is None:
+            raise RuntimeError("Attach a QCar before step().")
+        
+        if thr_cmd is None:
+            thr_cmd = 0.01
+            print("Warnning: No Thoque cmd, apply the default cmd, 0.001 !")
+
+        if strg_cmd is None:
+            strg_cmd = 0
+            print("Warnning: No Steering cmd, apply the default cmd, 0 !")
+        slef.qcar.write(thr_cmd, strg_cmd)
+
+        out = {
+            "thr_cmd": thr_cmd,
+            "strg_cmd": strg_cmd,
+        }
+
+        return out

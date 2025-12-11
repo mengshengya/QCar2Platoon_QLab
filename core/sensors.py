@@ -1,6 +1,7 @@
 import os
 import csv
 import time
+import json  # 用于序列化雷达日志
 import numpy as np
 
 from qvl.multi_agent import readRobots
@@ -113,24 +114,37 @@ class VehicleSensors:
         out["gps_pos"] = pos    # None or np.ndarray shape (3,)
         out["gps_rpy"] = rpy    # None or np.ndarray shape (3,)
 
-        # 3) LiDAR 前/后距离及点云
-        # 注：你 measure_front_rear_from_lidar() 里已经不保存文件，仅返回 dict，非常适合直接复用
+        # 3) LiDAR 前/后距离
         if self.use_lidar:
-            lidar_info = self._read_lidar_raw(
+            lidar_info = self.measure_front_rear_from_lidar(
+                data_dir="",        # 保存交给 logger 来做，这里可以传空或 None
+                cfg=None,
+                timestamp=timestamp
             )
         else:
             lidar_info = {
-                "distance": np.array([]),
-                "angles": np.array([]),
+                "front_m": float("nan"),
+                "rear_m": float("nan"),
+                "n_front": 0,
+                "n_rear": 0,
+                "xf": np.array([]),
+                "yf": np.array([]),
+                "rf": np.array([]),
+                "xr": np.array([]),
+                "yr": np.array([]),
+                "rr": np.array([]),
                 "front_fallback": False,
             }
-        out["lidar"] = lidar_info  
+        # out["lidar"] = lidar_info  
 
+        out["front_m"] = lidar_info["front_m"]
+        out["rear_m"] = lidar_info["rear_m"]
         # 4) 统一加上时间戳
         if timestamp is not None:
             out["t_s"] = float(timestamp)
 
         return out
+
 
     # ----- Raw LiDAR read (ranges [m], angles [rad]) -----
     def _read_lidar_raw(self) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
@@ -140,22 +154,9 @@ class VehicleSensors:
         if lid is None:
             print("ERROR: Lidar does not configured")
             return None, None
-        read_false_true = False
-        for attempt in range(2):
-            try:
-                read_false_true = lid.read()
-            except Exception:
-                if attempt == 0:
-                    time.sleep(0.01)
-                    continue
-                print(f"LiDAR read again (veh {self.vehicle_id})")
-                return None, None
-            if read_false_true:
-                break
-            if attempt == 0:
-                time.sleep(0.01)
-        if read_false_true is False:
-            print(f"Sensor.py: LiDAR read failed (veh {self.vehicle_id})")
+
+        lid.read()
+        
         distances = getattr(lid, "distances", None)
         angles = getattr(lid, "angles", None)
         if distances is None or angles is None:
@@ -177,6 +178,28 @@ class VehicleSensors:
             return None, None
         
         return distances, angles
+
+    def _log_lidar_snapshot(self, lidar_info: Any, timestamp: Optional[float]) -> None:
+        log_root = os.path.join(os.getcwd(), "log", "lidar")  # 组合雷达日志保存路径
+        os.makedirs(log_root, exist_ok=True)  # 确保log/lidar目录存在并可写
+        distances, angles = (None, None)  # 初始化距离与角度的容器
+        if isinstance(lidar_info, tuple) and len(lidar_info) == 2:  # 支持_read_lidar_raw返回的元组格式
+            distances, angles = lidar_info  # 将元组拆解为距离和角度
+        elif isinstance(lidar_info, dict):  # 支持预判你所需的dict格式
+            distances = lidar_info.get("distance")  # 从dict中提取距离
+            angles = lidar_info.get("angles")  # 从dict中提取角度
+        ts = round(float(timestamp) if timestamp is not None else time.time(), 4)  # 时间戳四舍五入到小数4位
+        dist_arr = np.round(np.asarray(distances, dtype=float), 4).tolist() if distances is not None else []  # 距离数组保留4位
+        ang_arr = np.round(np.asarray(angles, dtype=float), 4).tolist() if angles is not None else []  # 角度数组保留4位
+        entry = {  # 构建写入日志的单条数据
+            "vehicle_id": self.vehicle_id,  # 车辆ID用于区分日志文件
+            "timestamp": ts,  # 时间戳秒（4位小数）
+            "distance": dist_arr,  # 距离数据列表（4位小数）
+            "angles": ang_arr,  # 角度数据列表（4位小数）
+        }
+        log_path = os.path.join(log_root, f"vehicle_{self.vehicle_id}.jsonl")  # 为每个车辆生成专属jsonl日志文件
+        with open(log_path, "a", encoding="utf-8") as fp:  # 追加模式打开日志文件
+            fp.write(json.dumps(entry) + "\n")  # 写入一行JSON日志个数
 
     # ----- Transform and filter helpers -----
     def _to_body_frame(self, distances: np.ndarray, angles: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:

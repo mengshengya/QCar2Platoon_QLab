@@ -75,7 +75,9 @@ def main():
                 state = vehicle.update_and_get_state(now)
             # 2) read neighbor comms (reserved)
             # 3) update control/observer (reserved)
+
             # 4) apply control commands (reserved)
+                applied_control_cmd = vehicle.apply_control_cmd(now, None, None)
 
             snapshot = make_snapshot(now, vehicles)               # package snapshot
             log_queue.put(snapshot)                               # enqueue for logging

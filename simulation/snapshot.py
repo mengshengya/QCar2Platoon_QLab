@@ -5,9 +5,10 @@ import numpy as np
 
 def make_snapshot(now_ts: float, vehicles: Iterable) -> dict:
     """Package current timestamp and all vehicle states into a JSON-safe dict."""
+    ts = round(float(now_ts), 4)                                   # limit timestamp to 4 decimals
     return {
-        "timestamp": float(now_ts),                # force plain float for JSON
-        "vehicles": [serialize_vehicle(v) for v in vehicles],  # per-vehicle payloads
+        "timestamp": ts,                                           # 4-decimal timestamp for logging
+        "vehicles": [serialize_vehicle(v) for v in vehicles],      # per-vehicle payloads
     }
 
 
@@ -25,11 +26,13 @@ def serialize_vehicle(vehicle) -> dict:
 
 
 def _to_plain(val: Any) -> Any:
-    """Convert numpy values to plain Python types for logging."""
+    """Convert values to JSON-safe types and round floats to 4 decimals."""
     if isinstance(val, np.ndarray):
-        return val.tolist()                                            # numpy -> list
+        return [_to_plain(v) for v in val.tolist()]                    # numpy -> list then recurse
     if isinstance(val, dict):
         return {k: _to_plain(v) for k, v in val.items()}               # recurse into dict
     if isinstance(val, (list, tuple)):
         return [_to_plain(v) for v in val]                             # recurse into sequences
-    return val                                                         # keep scalars/None as-is
+    if isinstance(val, (float, np.floating)):
+        return round(float(val), 4)                                    # limit precision on floats
+    return val                                                         # keep scalars/None/ints as-is
