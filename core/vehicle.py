@@ -117,22 +117,45 @@ class VehicleAgent:
         return self.state_true, meas
 
 
-    def apply_control_cmd(slef, t: float, thr_cmd: float, strg_cmd: float):
-        if slef.qcar is None:
+    def apply_control_cmd(
+        self,
+        t: float,
+        measurements: Dict[str, Any],
+        neighbor_state: Optional[Dict[str, Any]] = None,
+        thr_cmd: Optional[float] = None,
+        strg_cmd: Optional[float] = None,
+    ):
+        """
+        Compute (if controller exists) and send control commands to QCar.
+        Measurements should be the dict returned by sensors.read_all().
+        计算并下发控制指令（throttle/steering），同时缓存最新控制量便于日志记录。
+        Compute control commands and cache the latest output for logging.
+        """
+        if self.qcar is None:
             raise RuntimeError("Attach a QCar before step().")
-        
+
+        if self.controller is not None:
+            thr_cmd, strg_cmd = self.controller.compute(
+                t, measurements or {}, neighbor_state
+            )
+
         if thr_cmd is None:
             thr_cmd = 0.01
-            print("Warnning: No Thoque cmd, apply the default cmd, 0.001 !")
+            print("Warning: No throttle cmd, apply default 0.01")
 
         if strg_cmd is None:
-            strg_cmd = 0
-            print("Warnning: No Steering cmd, apply the default cmd, 0 !")
-        slef.qcar.write(thr_cmd, strg_cmd)
+            strg_cmd = 0.0
+            print("Warning: No steering cmd, apply default 0")
+
+        self.qcar.write(thr_cmd, strg_cmd)
 
         out = {
             "thr_cmd": thr_cmd,
             "strg_cmd": strg_cmd,
         }
+
+        # 缓存最新控制，用于快照/日志；避免None导致后续序列化失败。
+        # Cache the latest control for snapshots/logging.
+        self.last_control = out
 
         return out

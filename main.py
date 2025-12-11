@@ -3,6 +3,7 @@ from core.fleet import QCarFleet                                 # fleet spawner
 
 from core.comm import comm                                       # comms placeholder (unused yet)
 from core.vehicle import VehicleAgent                            # vehicle agent abstraction
+from core.controllers import VehicleController                   # control strategy wrapper
 # from control.controller import ControllerFactory               # future controller factory
 # from control.strategies import ConstantPolicy, build_policy_from_spec
 # from observer.observer import ObserverFactory, EMAObserver, HeadwayGapObserver, PassThroughObserver, build_observer_from_spec
@@ -27,8 +28,7 @@ stop_event = threading.Event()                                    # signal to st
 log_dir = Path("log")
 log_dir.mkdir(parents=True, exist_ok=True)  # safe if it already exists
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-log_file = log_dir / f"run_{timestamp}.log"
-log_thread = LogConsumer(log_queue, log_file, stop_event)    # configure log file path
+log_thread = LogConsumer(log_queue, log_dir, stop_event, run_tag=timestamp)    # per-vehicle logs
 log_thread.start()                                                # launch logger in background
 
 def main():
@@ -43,10 +43,15 @@ def main():
 
     vehicles: list[VehicleAgent] = []                             # 2) create vehicle agents
     for car_id in range(num_cars):
+        try:
+            controller = VehicleController.from_config(car_id, update_rate)
+        except Exception as exc:
+            print(f"Car {car_id}: failed to load controller ({exc}); using defaults")
+            controller = None
         veh = VehicleAgent(                                       # construct each agent
             vehicle_id=car_id,
             rate_hz=update_rate,
-            controller=None,
+            controller=controller,
             observer=None,
             comm_endpoint=None,
             sensors=None,
@@ -72,12 +77,12 @@ def main():
             t_rel = cycle_start - t0                              # time since start
             now = t_rel                                           # simulation time (seconds)
             for vehicle in vehicles:                              # 1) read all vehicle states
-                state = vehicle.update_and_get_state(now)
+                state_true, meas = vehicle.update_and_get_state(now)
             # 2) read neighbor comms (reserved)
             # 3) update control/observer (reserved)
 
             # 4) apply control commands (reserved)
-                applied_control_cmd = vehicle.apply_control_cmd(now, None, None)
+                applied_control_cmd = vehicle.apply_control_cmd(now, meas, None)
 
             snapshot = make_snapshot(now, vehicles)               # package snapshot
             log_queue.put(snapshot)                               # enqueue for logging
