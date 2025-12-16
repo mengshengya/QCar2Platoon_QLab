@@ -36,6 +36,15 @@ def main():
     update_rate = sim_cfg.sim_update_rate                         # update frequency [Hz]
     num_cars = sim_cfg.num_cars                                   # fleet size
 
+    # Configure lightweight in-process comms so followers can read leader (car 0) state
+    comm.reset()
+    comm.register_agents(range(num_cars))
+    if num_cars > 1:
+        followers = {i: [0] for i in range(1, num_cars)}
+        comm.configure_manual(followers)
+    else:
+        comm.configure_manual({0: []})
+
     fleet = QCarFleet(num_cars=num_cars, car_type="QC2")          # 1) spawn cars in QLabs
     fleet.close()                                                 # release QLabs control if not needed
     fleet.connect()                                               # connect to QLabs
@@ -53,7 +62,7 @@ def main():
             rate_hz=update_rate,
             controller=controller,
             observer=None,
-            comm_endpoint=None,
+            comm_endpoint=comm,
             sensors=None,
             qcar=None,
             use_lidar=sim_cfg.use_lidar,

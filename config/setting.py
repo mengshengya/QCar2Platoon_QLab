@@ -25,7 +25,7 @@ class SimConfig:
     car_type: str = "QC2"
 
     # 仿真时间长度（秒）
-    duration_s = 5
+    duration_s = 10
     # 控制器参数
     sim_update_rate: int = 50
     # 传感器使用开关

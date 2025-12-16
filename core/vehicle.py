@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 import time
 import numpy as np
 import threading
@@ -108,11 +108,24 @@ class VehicleAgent:
 
         # if gps_pos is not None and velocity is not None and accel is not None:
             # 举个例子：pos=[x,y,z], rpy=[roll,pitch,yaw]
-        x_accel,_,_ = accel
-        self.state_true = np.array([velocity, x_accel], dtype=float)
+        x_accel = float(accel[0]) if accel is not None and len(accel) else 0.0
+        vel_val = float(velocity) if velocity is not None else 0.0
+        self.state_true = np.array([vel_val, x_accel], dtype=float)
         # else:
             # self.state_true = None
             # print(f"ERROR!!!!Vehicle {self.vehicle_id}: Incomplete measurements for state_true construction.")
+
+        # Publish minimal state to comms so followers can use leader info
+        if self.comm is not None:
+            msg = {
+                "v": vel_val,
+                "accel": accel.tolist() if isinstance(accel, np.ndarray) else accel,
+                "gps_pos": gps_pos.tolist() if isinstance(gps_pos, np.ndarray) else gps_pos,
+            }
+            try:
+                self.comm.publish(self.vehicle_id, msg)
+            except Exception:
+                pass
 
         return self.state_true, meas
 
@@ -133,6 +146,14 @@ class VehicleAgent:
         """
         if self.qcar is None:
             raise RuntimeError("Attach a QCar before step().")
+
+        if neighbor_state is None and self.comm is not None:
+            try:
+                neighbors = self.comm.read_neighbors(self.vehicle_id, keys=["v", "accel", "gps_pos"])
+                if self.vehicle_id != 0:
+                    neighbor_state = neighbors.get(0)
+            except Exception:
+                neighbor_state = None
 
         if self.controller is not None:
             thr_cmd, strg_cmd = self.controller.compute(

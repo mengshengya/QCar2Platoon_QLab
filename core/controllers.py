@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, Tuple
+from pathlib import Path
+from datetime import datetime
 
 import numpy as np
 
@@ -42,6 +45,9 @@ class ConstantStrategy(ControlStrategy):
         meas: Dict[str, Any],
         neighbor: Optional[Dict[str, Any]] = None,
     ) -> ControlCmd:
+        self.last_raw_thr: Optional[float] = None
+        raw_thr = self.throttle
+        self.last_raw_thr = float(raw_thr)
         return ControlCmd(float(self.throttle), float(self.steering))
 
 
@@ -70,6 +76,7 @@ class HeadwayStrategy(ControlStrategy):
         meas: Dict[str, Any],
         neighbor: Optional[Dict[str, Any]] = None,
     ) -> ControlCmd:
+        self.last_raw_thr: Optional[float] = None
         v = float(meas.get("v") or 0.0)
         accel = meas.get("accel", None)
         ax = float(accel[0]) if accel is not None and len(accel) else 0.0
@@ -80,15 +87,26 @@ class HeadwayStrategy(ControlStrategy):
             return ControlCmd(self._clamp(self.fallback_throttle), float(self.steering))
 
         desired_gap = self.min_gap + self.time_headway * max(v, 0.0)
-        gap_err = front_m - desired_gap
+        gap_err = front_m + desired_gap
 
-        # lead_v = float(neighbor.get("lead_v", 0.0)) if neighbor else 0.0
-        # lead_a = float(neighbor.get("lead_a", 0.0)) if neighbor else 0.0
-        # rel_v = lead_v - v
-        # rel_a = lead_a - ax
+        lead_v = lead_a = 0.0
+        if neighbor:
+            try:
+                lead_v = float(neighbor.get("v", 0.0) or 0.0)
+            except Exception:
+                lead_v = 0.0
+            nb_accel = neighbor.get("accel") if isinstance(neighbor, dict) else None
+            if nb_accel is not None:
+                try:
+                    lead_a = float(np.asarray(nb_accel, dtype=float).reshape(-1)[0])
+                except Exception:
+                    lead_a = 0.0
 
-        raw_thr = self.kp * gap_err 
-        # + self.kv * rel_v + self.ka * rel_a
+        rel_v = lead_v - v
+        rel_a = lead_a - ax
+
+        raw_thr = self.kp * gap_err + self.kv * rel_v + self.ka * rel_a
+        self.last_raw_thr = float(raw_thr)
         thr = self._clamp(raw_thr)
         if not np.isfinite(thr):
             thr = self.fallback_throttle
@@ -130,6 +148,7 @@ class VehicleController:
         self.vehicle_id = int(vehicle_id)
         self.rate_hz = float(rate_hz)
         self.strategy = strategy
+        self.logger = self._init_logger()
 
     @classmethod
     def from_config(
@@ -145,4 +164,23 @@ class VehicleController:
         neighbor: Optional[Dict[str, Any]] = None,
     ) -> Tuple[float, float]:
         cmd = self.strategy.compute(t, meas, neighbor)
+        raw_thr = getattr(self.strategy, "last_raw_thr", None)
+        if raw_thr is not None and self.logger is not None:
+            self.logger.info(f"t={t:.3f}\traw_thr={raw_thr:.6f}")
         return cmd.throttle, cmd.steering
+
+    def _init_logger(self) -> logging.Logger:
+        log_dir = Path("log/controller")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_path = log_dir / f"vehicle_{self.vehicle_id}_controller_{ts}.log"
+
+        logger_name = f"vehicle_controller_{self.vehicle_id}"
+        logger = logging.getLogger(logger_name)
+        if not logger.handlers:
+            logger.setLevel(logging.INFO)
+            handler = logging.FileHandler(log_path, encoding="utf-8")
+            handler.setFormatter(logging.Formatter("%(asctime)s\t%(message)s"))
+            logger.addHandler(handler)
+            logger.propagate = False
+        return logger

@@ -3,6 +3,6 @@
 {
     "0": {"type": "constant", "params": {"throttle": 0.075, "steering": 0.0}},
     "1": {"type": "headway",  "params": {"min_gap": 0.6, "time_headway": 2, "kp": -0.1169, "kv": -0.3689, "ka":-0.0364, "thr_min": 0.01, "thr_max": 1.0, "steering": 0.0, "fallback_throttle": 0.05}},
-    "2": {"type": "headway",  "params": {"min_gap": 0.6, "time_headway": 2, "kp": -0.0007, "kv": -0.0019, "ka":0.0014, "thr_min": 0.01, "thr_max": 1.0, "steering": 0.0, "fallback_throttle": 0.05}},
-    "3": {"type": "headway",  "params": {"min_gap": 0.6, "time_headway": 2, "kp": 0.0002, "kv": 0.0003, "ka":0.0017, "thr_min": 0.01, "thr_max": 1.0, "steering": 0.0, "fallback_throttle": 0.05}}
+    "2": {"type": "headway",  "params": {"min_gap": 0.6, "time_headway": 2, "kp": -0.1169, "kv": -0.0019, "ka":0.0014, "thr_min": 0.01, "thr_max": 1.0, "steering": 0.0, "fallback_throttle": 0.05}},
+    "3": {"type": "headway",  "params": {"min_gap": 0.6, "time_headway": 2, "kp": -0.1169, "kv": 0.0003, "ka":0.0017, "thr_min": 0.01, "thr_max": 1.0, "steering": 0.0, "fallback_throttle": 0.05}}
 }
