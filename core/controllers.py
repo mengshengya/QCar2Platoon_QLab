@@ -115,6 +115,67 @@ class HeadwayStrategy(ControlStrategy):
     def _clamp(self, val: float) -> float:
         return float(np.clip(val, self.thr_min, self.thr_max))
 
+@dataclass
+class DistributedStrategy(ControlStrategy):
+    """
+    Distributed controller.
+    ui = sum from j = 0 until j = i-1 K_{ij}(xi - xj)
+    """
+
+    min_gap: float
+    time_headway: float
+    K: np.array
+    thr_min: float
+    thr_max: float
+    fallback_throttle: float
+    steering: float = 0.0
+    name: str = "distributed"
+
+    def compute(
+        self,
+        t: float,
+        meas: Dict[str, Any],
+        neighbor: Optional[Dict[str, Any]] = None,
+    ) -> ControlCmd:
+        self.last_raw_thr: Optional[float] = None
+        v = float(meas.get("v") or 0.0)
+        accel = meas.get("accel", None)
+        ax = float(accel[0]) if accel is not None and len(accel) else 0.0
+        front_m = meas.get("front_m", np.nan)
+
+        # No front measurement -> fallback throttle
+        if not np.isfinite(front_m):
+            return ControlCmd(self._clamp(self.fallback_throttle), float(self.steering))
+
+        desired_gap = self.min_gap + self.time_headway * max(v, 0.0)
+        gap_err = front_m + desired_gap
+
+        lead_v = lead_a = 0.0
+        if neighbor:
+            try:
+                lead_v = float(neighbor.get("v", 0.0) or 0.0)
+            except Exception:
+                lead_v = 0.0
+            nb_accel = neighbor.get("accel") if isinstance(neighbor, dict) else None
+            if nb_accel is not None:
+                try:
+                    lead_a = float(np.asarray(nb_accel, dtype=float).reshape(-1)[0])
+                except Exception:
+                    lead_a = 0.0
+
+        rel_v = lead_v - v
+        rel_a = lead_a - ax
+
+        raw_thr = self.kp * gap_err + self.kv * rel_v + self.ka * rel_a
+        self.last_raw_thr = float(raw_thr)
+        thr = self._clamp(raw_thr)
+        if not np.isfinite(thr):
+            thr = self.fallback_throttle
+        return ControlCmd(thr, float(self.steering))
+
+    def _clamp(self, val: float) -> float:
+        return float(np.clip(val, self.thr_min, self.thr_max))
+
 
 # ===== Factory =====
 class StrategyFactory:
